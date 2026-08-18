@@ -1,0 +1,47 @@
+# one-key-install
+
+Linux 一键安装脚本模板。仿 `bash <(curl -Ls URL)` 的远程一键执行方式，脚本不落地、直接下载即运行。
+
+## 用法
+
+```bash
+# 进入交互菜单
+bash <(curl -Ls https://raw.githubusercontent.com/alick-zhang/one-key-install/main/install.sh)
+
+# 或带参数直接指定安装项
+bash <(curl -Ls https://raw.githubusercontent.com/alick-zhang/one-key-install/main/install.sh) docker
+bash <(curl -Ls https://raw.githubusercontent.com/alick-zhang/one-key-install/main/install.sh) docker nginx tailscale
+bash <(curl -Ls https://raw.githubusercontent.com/alick-zhang/one-key-install/main/install.sh) all
+```
+
+## 支持安装项
+
+| 选项 | 内容 |
+|------|------|
+| unzip | unzip 解压工具 |
+| docker | Docker + Docker Compose（官方 get.docker.com 脚本） |
+| tailscale | Tailscale 组网（官方 install.sh） |
+| nginx | Nginx 反向代理 |
+
+## 特性
+
+- **函数化**：每个安装项一个函数，往里加东西 = 加函数 + 菜单加一行
+- **幂等**：已安装的项自动跳过，重复跑 / 中断后续跑都安全
+- **多发行版**：兼容 apt（Debian/Ubuntu）、dnf/yum（CentOS/RHEL）
+- **参数式调用**：支持 `install.sh <item>` 或组合多个，不传参数进交互菜单
+
+## 添加新安装项
+
+在 `install.sh` 里照葫芦画瓢：
+
+```bash
+install_xxx() {
+  command -v xxx >/dev/null 2>&1 && { log_info "xxx 已安装，跳过"; return; }
+  log_info "安装 xxx ..."
+  PKG xxx                                  # 或官方脚本 curl ... | bash
+  systemctl enable --now xxx               # 若需要开机自启
+  command -v xxx >/dev/null 2>&1 && log_info "完成" || { log_error "失败"; exit 1; }
+}
+```
+
+然后在 `case "$1"` 和 `interactive()` 菜单里各加一行。
