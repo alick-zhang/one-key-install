@@ -92,6 +92,30 @@ install_nano() {
   command -v nano >/dev/null 2>&1 && log_info "nano 安装完成" || { log_error "nano 安装失败"; exit 1; }
 }
 
+setup_swap() {
+  local SWAP_SIZE=500   # MB
+
+  if swapon --show | tail -n +2 | grep -q .; then
+    log_info "系统已有启用的 swap，跳过创建"
+  else
+    log_info "创建 ${SWAP_SIZE}M swapfile ..."
+    dd if=/dev/zero of=/swapfile bs=1M count=$SWAP_SIZE status=none
+    chmod 600 /swapfile
+    mkswap /swapfile >/dev/null
+    swapon /swapfile
+    grep -q '^/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+    log_info "swapfile 创建完成（已写入 /etc/fstab 持久化）"
+  fi
+
+  if [ "$(cat /proc/sys/vm/swappiness)" = "10" ]; then
+    log_info "swappiness 已是 10，跳过"
+  else
+    sysctl -w vm.swappiness=10 >/dev/null
+    echo 'vm.swappiness = 10' > /etc/sysctl.d/99-swappiness.conf
+    log_info "swappiness 已设为 10（写入 /etc/sysctl.d/99-swappiness.conf 持久化）"
+  fi
+}
+
 # ================= 菜单 =================
 menu() {
   echo
@@ -102,7 +126,8 @@ menu() {
   echo " 4) Nginx"
   echo " 5) Pi（终端 AI 编程助手）"
   echo " 6) nano"
-  echo " 7) 全部安装"
+  echo " 7) Swap（500M + swappiness 10）"
+  echo " 8) 全部安装"
   echo " 0) 退出"
   echo "=============================================="
 }
@@ -110,7 +135,7 @@ menu() {
 interactive() {
   while true; do
     menu
-    read -rp "请选择 [0-7]: " n
+    read -rp "请选择 [0-8]: " n
     case $n in
       1) install_unzip ;;
       2) install_docker ;;
@@ -118,7 +143,8 @@ interactive() {
       4) install_nginx ;;
       5) install_pi ;;
       6) install_nano ;;
-      7) install_unzip; install_docker; install_tailscale; install_nginx; install_pi; install_nano ;;
+      7) setup_swap ;;
+      8) install_unzip; install_docker; install_tailscale; install_nginx; install_pi; install_nano; setup_swap ;;
       0) log_info "再见"; exit 0 ;;
       *) log_warn "无效选项: $n" ;;
     esac
@@ -133,7 +159,8 @@ case "$1" in
   nginx)    install_nginx ;;
   pi)       install_pi ;;
   nano)     install_nano ;;
-  all)      install_unzip; install_docker; install_tailscale; install_nginx; install_pi; install_nano ;;
+  swap)     setup_swap ;;
+  all)      install_unzip; install_docker; install_tailscale; install_nginx; install_pi; install_nano; setup_swap ;;
   "")       interactive ;;
-  *)        log_warn "未知参数: $1（可用: unzip / docker / tailscale / nginx / pi / nano / all）"; exit 1 ;;
+  *)        log_warn "未知参数: $1（可用: unzip / docker / tailscale / nginx / pi / nano / swap / all）"; exit 1 ;;
 esac

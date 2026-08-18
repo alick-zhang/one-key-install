@@ -24,6 +24,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/alick-zhang/one-key-install/ma
 | nginx | Nginx 反向代理 |
 | pi | Pi 终端 AI 编程助手（官方 pi.dev 安装器，自动处理 Node.js 22.19+ 依赖） |
 | nano | nano 文本编辑器（精简系统不自带） |
+| swap | 创建 500M swapfile（fstab 持久化）+ swappiness=10（内存优化） |
 
 ## 特性
 
