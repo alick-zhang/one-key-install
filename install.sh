@@ -3,7 +3,7 @@
 # one-key-install —— Linux 一键安装脚本
 # 用法：
 #   bash <(curl -Ls https://raw.githubusercontent.com/alick-zhang/one-key-install/main/install.sh)
-#   或带参数直接指定: install.sh docker nginx  /  install.sh all
+#   或带参数直接指定: install.sh docker pi  /  install.sh all
 #
 # 设计：
 #   - 每个安装项 = 一个函数，往里加东西就加函数 + 菜单加一行
@@ -77,6 +77,14 @@ install_nginx() {
   command -v nginx >/dev/null 2>&1 && log_info "Nginx 安装完成" || { log_error "Nginx 安装失败"; exit 1; }
 }
 
+install_pi() {
+  command -v pi >/dev/null 2>&1 && { log_info "Pi 已安装，跳过"; return; }
+  log_info "安装 Pi（终端 AI 编程助手）..."
+  # 官方安装器自动处理 Node.js 22.19+ 依赖（缺失时交互式补装）
+  curl -fsSL https://pi.dev/install.sh | sh
+  command -v pi >/dev/null 2>&1 && log_info "Pi 安装完成，运行 'pi' 启动" || { log_error "Pi 安装失败"; exit 1; }
+}
+
 # ================= 菜单 =================
 menu() {
   echo
@@ -85,7 +93,8 @@ menu() {
   echo " 2) Docker + Docker Compose"
   echo " 3) Tailscale"
   echo " 4) Nginx"
-  echo " 5) 全部安装"
+  echo " 5) Pi（终端 AI 编程助手）"
+  echo " 6) 全部安装"
   echo " 0) 退出"
   echo "=============================================="
 }
@@ -93,13 +102,14 @@ menu() {
 interactive() {
   while true; do
     menu
-    read -rp "请选择 [0-5]: " n
+    read -rp "请选择 [0-6]: " n
     case $n in
       1) install_unzip ;;
       2) install_docker ;;
       3) install_tailscale ;;
       4) install_nginx ;;
-      5) install_unzip; install_docker; install_tailscale; install_nginx ;;
+      5) install_pi ;;
+      6) install_unzip; install_docker; install_tailscale; install_nginx; install_pi ;;
       0) log_info "再见"; exit 0 ;;
       *) log_warn "无效选项: $n" ;;
     esac
@@ -112,7 +122,8 @@ case "$1" in
   docker)   install_docker ;;
   tailscale) install_tailscale ;;
   nginx)    install_nginx ;;
-  all)      install_unzip; install_docker; install_tailscale; install_nginx ;;
+  pi)       install_pi ;;
+  all)      install_unzip; install_docker; install_tailscale; install_nginx; install_pi ;;
   "")       interactive ;;
-  *)        log_warn "未知参数: $1（可用: unzip / docker / tailscale / nginx / all）"; exit 1 ;;
+  *)        log_warn "未知参数: $1（可用: unzip / docker / tailscale / nginx / pi / all）"; exit 1 ;;
 esac

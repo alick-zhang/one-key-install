@@ -22,6 +22,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/alick-zhang/one-key-install/ma
 | docker | Docker + Docker Compose（官方 get.docker.com 脚本） |
 | tailscale | Tailscale 组网（官方 install.sh） |
 | nginx | Nginx 反向代理 |
+| pi | Pi 终端 AI 编程助手（官方 pi.dev 安装器，自动处理 Node.js 22.19+ 依赖） |
 
 ## 特性
 
