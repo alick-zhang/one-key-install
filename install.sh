@@ -168,6 +168,39 @@ EOF
   fi
 }
 
+setup_ports() {
+  local ports=(80 443)   # HTTP / HTTPS
+
+  log_info "放行端口 80/443 ..."
+  # 注意：云厂商安全组（阿里云/腾讯云/AWS 控制台）脚本改不了，需手动放行
+  if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | head -1 | grep -q '^Status: active'; then
+    # Ubuntu/Debian 系：ufw 在管
+    local p
+    for p in "${ports[@]}"; do ufw allow "$p/tcp" >/dev/null; done
+    log_info "ufw 已放行 80/443"
+  elif command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state 2>/dev/null | grep -q running; then
+    # CentOS/RHEL 系：firewalld 在管（--permanent 持久化 + reload 生效）
+    local p args=()
+    for p in "${ports[@]}"; do args+=(--add-port="$p/tcp"); done
+    firewall-cmd --permanent "${args[@]}" >/dev/null && firewall-cmd --reload >/dev/null
+    log_info "firewalld 已放行 80/443（持久化）"
+  elif command -v iptables >/dev/null 2>&1 && iptables -L INPUT -n 2>/dev/null | grep -qE 'REJECT|DROP'; then
+    # 裸 iptables 挂了拦截规则（甲骨文等镜像常见）：插到最前放行，能持久化就持久化
+    local p
+    for p in "${ports[@]}"; do iptables -I INPUT -p tcp --dport "$p" -j ACCEPT; done
+    if [ -d /etc/iptables ]; then
+      iptables-save > /etc/iptables/rules.v4 2>/dev/null || true
+      log_info "iptables 已放行 80/443，并写入 /etc/iptables/rules.v4 持久化"
+    else
+      log_warn "iptables 已放行 80/443，但未找到持久化目录，重启后需重跑本项"
+    fi
+  else
+    # 没有防火墙在拦截（多数 VPS 的默认状态），端口本来就是通的
+    log_info "无防火墙拦截，80/443 本来就通，无需操作"
+  fi
+  log_warn "云厂商安全组需在控制台手动放行 80/443（脚本管不到机房那道门）"
+}
+
 # ================= 菜单 =================
 menu() {
   echo
@@ -181,7 +214,8 @@ menu() {
   echo " 7) Swap（500M + swappiness 10）"
   echo " 8) BBR（TCP 拥塞控制，内核 >= 4.9）"
   echo " 9) cron（定时任务）"
-  echo "10) 全部安装"
+  echo "10) 防火墙放行 80/443"
+  echo "11) 全部安装"
   echo " 0) 退出"
   echo "=============================================="
 }
@@ -189,7 +223,7 @@ menu() {
 interactive() {
   while true; do
     menu
-    read -rp "请选择 [0-10]: " n
+    read -rp "请选择 [0-11]: " n
     case $n in
       1) install_unzip ;;
       2) install_docker ;;
@@ -200,7 +234,8 @@ interactive() {
       7) setup_swap ;;
       8) setup_bbr ;;
       9) install_cron ;;
-      10) install_unzip; install_docker; install_tailscale; install_nginx; install_pi; install_nano; setup_swap; setup_bbr; install_cron ;;
+      10) setup_ports ;;
+      11) install_unzip; install_docker; install_tailscale; install_nginx; install_pi; install_nano; setup_swap; setup_bbr; install_cron; setup_ports ;;
       0) log_info "再见"; exit 0 ;;
       *) log_warn "无效选项: $n" ;;
     esac
@@ -218,7 +253,8 @@ case "$1" in
   swap)     setup_swap ;;
   bbr)      setup_bbr ;;
   cron)     install_cron ;;
-  all)      install_unzip; install_docker; install_tailscale; install_nginx; install_pi; install_nano; setup_swap; setup_bbr; install_cron ;;
+  ports)    setup_ports ;;
+  all)      install_unzip; install_docker; install_tailscale; install_nginx; install_pi; install_nano; setup_swap; setup_bbr; install_cron; setup_ports ;;
   "")       interactive ;;
-  *)        log_warn "未知参数: $1（可用: unzip / docker / tailscale / nginx / pi / nano / swap / bbr / cron / all）"; exit 1 ;;
+  *)        log_warn "未知参数: $1（可用: unzip / docker / tailscale / nginx / pi / nano / swap / bbr / cron / ports / all）"; exit 1 ;;
 esac

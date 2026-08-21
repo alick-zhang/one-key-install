@@ -27,6 +27,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/alick-zhang/one-key-install/ma
 | cron | cron 定时任务（apt 装 cron / yum·dnf 装 cronie 并自启，`crontab -e` 添加任务） |
 | swap | 创建 500M swapfile（fstab 持久化）+ swappiness=10（内存优化） |
 | bbr | 开启 BBR TCP 拥塞控制 + fq 队列（sysctl.d 持久化，需内核 >= 4.9） |
+| ports | 防火墙放行 80/443（自动识别 ufw / firewalld / iptables；无防火墙则确认已通。云厂商安全组需控制台手动放行） |
 
 ## 特性
 
