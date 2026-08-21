@@ -168,6 +168,29 @@ EOF
   fi
 }
 
+install_fail2ban() {
+  command -v fail2ban-client >/dev/null 2>&1 && { log_info "fail2ban 已安装，跳过"; return; }
+  log_info "安装 fail2ban（SSH 防爆破）..."
+  PKG fail2ban
+  # sshd jail：10 分钟内密码错 5 次 → 封禁 1 小时（参数借鉴 kejilion 默认值）
+  mkdir -p /etc/fail2ban/jail.d
+  cat > /etc/fail2ban/jail.d/sshd.local <<EOF
+[sshd]
+enabled = true
+maxretry = 5
+findtime = 10m
+bantime = 1h
+EOF
+  systemctl enable --now fail2ban
+  systemctl restart fail2ban   # 重启确保读到新 jail 配置
+  if fail2ban-client status sshd >/dev/null 2>&1; then
+    log_info "fail2ban 安装完成（10 分钟内错 5 次 → 封 1 小时），查看: fail2ban-client status sshd"
+  else
+    log_error "fail2ban 服务异常，查日志: journalctl -u fail2ban -n 20"
+    exit 1
+  fi
+}
+
 setup_ports() {
   local ports=(80 443)   # HTTP / HTTPS
 
@@ -201,6 +224,26 @@ setup_ports() {
   log_warn "云厂商安全组需在控制台手动放行 80/443（脚本管不到机房那道门）"
 }
 
+setup_clean() {
+  log_info "系统清理 ..."
+  # 清无用的依赖包 + 包管理器缓存
+  if command -v apt-get >/dev/null 2>&1; then
+    apt-get autoremove --purge -y || log_warn "apt autoremove 有报错，跳过继续"
+    apt-get clean
+  elif command -v dnf >/dev/null 2>&1; then
+    dnf autoremove -y || true
+    dnf clean all
+  else
+    yum autoremove -y || true
+    yum clean all
+  fi
+  # journal 系统日志：只留 7 天、总量压到 200M 以内（无 systemd 的容器里自动跳过）
+  journalctl --rotate 2>/dev/null || true
+  journalctl --vacuum-time=7d 2>/dev/null | tail -n 1
+  journalctl --vacuum-size=200M 2>/dev/null | tail -n 1
+  log_info "系统清理完成"
+}
+
 # ================= 菜单 =================
 menu() {
   echo
@@ -215,7 +258,9 @@ menu() {
   echo " 8) BBR（TCP 拥塞控制，内核 >= 4.9）"
   echo " 9) cron（定时任务）"
   echo "10) 防火墙放行 80/443"
-  echo "11) 全部安装"
+  echo "11) fail2ban（SSH 防爆破）"
+  echo "12) 系统清理（包缓存 + 日志压缩）"
+  echo "13) 全部安装"
   echo " 0) 退出"
   echo "=============================================="
 }
@@ -223,7 +268,7 @@ menu() {
 interactive() {
   while true; do
     menu
-    read -rp "请选择 [0-11]: " n
+    read -rp "请选择 [0-13]: " n
     case $n in
       1) install_unzip ;;
       2) install_docker ;;
@@ -235,7 +280,9 @@ interactive() {
       8) setup_bbr ;;
       9) install_cron ;;
       10) setup_ports ;;
-      11) install_unzip; install_docker; install_tailscale; install_nginx; install_pi; install_nano; setup_swap; setup_bbr; install_cron; setup_ports ;;
+      11) install_fail2ban ;;
+      12) setup_clean ;;
+      13) install_unzip; install_docker; install_tailscale; install_nginx; install_pi; install_nano; setup_swap; setup_bbr; install_cron; setup_ports; install_fail2ban ;;
       0) log_info "再见"; exit 0 ;;
       *) log_warn "无效选项: $n" ;;
     esac
@@ -254,7 +301,9 @@ case "$1" in
   bbr)      setup_bbr ;;
   cron)     install_cron ;;
   ports)    setup_ports ;;
-  all)      install_unzip; install_docker; install_tailscale; install_nginx; install_pi; install_nano; setup_swap; setup_bbr; install_cron; setup_ports ;;
+  fail2ban) install_fail2ban ;;
+  clean)    setup_clean ;;
+  all)      install_unzip; install_docker; install_tailscale; install_nginx; install_pi; install_nano; setup_swap; setup_bbr; install_cron; setup_ports; install_fail2ban ;;
   "")       interactive ;;
-  *)        log_warn "未知参数: $1（可用: unzip / docker / tailscale / nginx / pi / nano / swap / bbr / cron / ports / all）"; exit 1 ;;
+  *)        log_warn "未知参数: $1（可用: unzip / docker / tailscale / nginx / pi / nano / swap / bbr / cron / ports / fail2ban / clean / all）"; exit 1 ;;
 esac

@@ -28,6 +28,8 @@ bash <(curl -Ls https://raw.githubusercontent.com/alick-zhang/one-key-install/ma
 | swap | 创建 500M swapfile（fstab 持久化）+ swappiness=10（内存优化） |
 | bbr | 开启 BBR TCP 拥塞控制 + fq 队列（sysctl.d 持久化，需内核 >= 4.9） |
 | ports | 防火墙放行 80/443（自动识别 ufw / firewalld / iptables；无防火墙则确认已通。云厂商安全组需控制台手动放行） |
+| fail2ban | SSH 防爆破：10 分钟内密码错 5 次封禁 1 小时（jail.d 持久化，`fail2ban-client status sshd` 查看） |
+| clean | 系统清理：autoremove 清无用包 + 包缓存 + journal 日志压到 7 天/200M（可反复跑） |
 
 ## 特性
 
