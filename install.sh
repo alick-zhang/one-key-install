@@ -92,6 +92,20 @@ install_nano() {
   command -v nano >/dev/null 2>&1 && log_info "nano 安装完成" || { log_error "nano 安装失败"; exit 1; }
 }
 
+install_cron() {
+  command -v crontab >/dev/null 2>&1 && { log_info "cron 已安装，跳过"; return; }
+  log_info "安装 cron（定时任务）..."
+  # Debian/Ubuntu 装 cron（服务名 cron）；CentOS/RHEL 装 cronie（服务名 crond）
+  if command -v apt-get >/dev/null 2>&1; then
+    PKG cron
+    systemctl enable --now cron
+  else
+    PKG cronie
+    systemctl enable --now crond
+  fi
+  command -v crontab >/dev/null 2>&1 && log_info "cron 安装完成，运行 'crontab -e' 添加定时任务" || { log_error "cron 安装失败"; exit 1; }
+}
+
 setup_swap() {
   local SWAP_SIZE=500   # MB
 
@@ -166,7 +180,8 @@ menu() {
   echo " 6) nano"
   echo " 7) Swap（500M + swappiness 10）"
   echo " 8) BBR（TCP 拥塞控制，内核 >= 4.9）"
-  echo " 9) 全部安装"
+  echo " 9) cron（定时任务）"
+  echo "10) 全部安装"
   echo " 0) 退出"
   echo "=============================================="
 }
@@ -174,7 +189,7 @@ menu() {
 interactive() {
   while true; do
     menu
-    read -rp "请选择 [0-9]: " n
+    read -rp "请选择 [0-10]: " n
     case $n in
       1) install_unzip ;;
       2) install_docker ;;
@@ -184,7 +199,8 @@ interactive() {
       6) install_nano ;;
       7) setup_swap ;;
       8) setup_bbr ;;
-      9) install_unzip; install_docker; install_tailscale; install_nginx; install_pi; install_nano; setup_swap; setup_bbr ;;
+      9) install_cron ;;
+      10) install_unzip; install_docker; install_tailscale; install_nginx; install_pi; install_nano; setup_swap; setup_bbr; install_cron ;;
       0) log_info "再见"; exit 0 ;;
       *) log_warn "无效选项: $n" ;;
     esac
@@ -201,7 +217,8 @@ case "$1" in
   nano)     install_nano ;;
   swap)     setup_swap ;;
   bbr)      setup_bbr ;;
-  all)      install_unzip; install_docker; install_tailscale; install_nginx; install_pi; install_nano; setup_swap; setup_bbr ;;
+  cron)     install_cron ;;
+  all)      install_unzip; install_docker; install_tailscale; install_nginx; install_pi; install_nano; setup_swap; setup_bbr; install_cron ;;
   "")       interactive ;;
-  *)        log_warn "未知参数: $1（可用: unzip / docker / tailscale / nginx / pi / nano / swap / bbr / all）"; exit 1 ;;
+  *)        log_warn "未知参数: $1（可用: unzip / docker / tailscale / nginx / pi / nano / swap / bbr / cron / all）"; exit 1 ;;
 esac
