@@ -116,6 +116,44 @@ setup_swap() {
   fi
 }
 
+setup_bbr() {
+  # 幂等：已启用则跳过
+  if [ "$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null)" = "bbr" ]; then
+    log_info "BBR 已启用，跳过"
+    return
+  fi
+
+  # BBR 需要内核 >= 4.9
+  local major minor
+  major=$(uname -r | cut -d. -f1)
+  minor=$(uname -r | cut -d. -f2)
+  if [ "$major" -lt 4 ] || { [ "$major" -eq 4 ] && [ "$minor" -lt 9 ]; }; then
+    log_warn "内核 $(uname -r) 低于 4.9，不支持 BBR，跳过"
+    return
+  fi
+
+  log_info "开启 BBR ..."
+  # 尝试加载模块（内核内置时会失败，属正常，忽略）
+  modprobe tcp_bbr 2>/dev/null || true
+  if ! grep -q bbr /proc/sys/net/ipv4/tcp_available_congestion_control; then
+    log_warn "内核未提供 BBR 算法（可用: $(cat /proc/sys/net/ipv4/tcp_available_congestion_control)），跳过"
+    return
+  fi
+
+  cat > /etc/sysctl.d/99-bbr.conf <<EOF
+net.core.default_qdisc = fq
+net.ipv4.tcp_congestion_control = bbr
+EOF
+  sysctl --system >/dev/null 2>&1 || true   # 容器内可能报权限错，以最终校验为准
+
+  if [ "$(sysctl -n net.ipv4.tcp_congestion_control)" = "bbr" ]; then
+    log_info "BBR 开启完成（写入 /etc/sysctl.d/99-bbr.conf 持久化）"
+  else
+    log_error "BBR 开启失败（容器环境可能不允许修改 sysctl）"
+    exit 1
+  fi
+}
+
 # ================= 菜单 =================
 menu() {
   echo
@@ -127,7 +165,8 @@ menu() {
   echo " 5) Pi（终端 AI 编程助手）"
   echo " 6) nano"
   echo " 7) Swap（500M + swappiness 10）"
-  echo " 8) 全部安装"
+  echo " 8) BBR（TCP 拥塞控制，内核 >= 4.9）"
+  echo " 9) 全部安装"
   echo " 0) 退出"
   echo "=============================================="
 }
@@ -135,7 +174,7 @@ menu() {
 interactive() {
   while true; do
     menu
-    read -rp "请选择 [0-8]: " n
+    read -rp "请选择 [0-9]: " n
     case $n in
       1) install_unzip ;;
       2) install_docker ;;
@@ -144,7 +183,8 @@ interactive() {
       5) install_pi ;;
       6) install_nano ;;
       7) setup_swap ;;
-      8) install_unzip; install_docker; install_tailscale; install_nginx; install_pi; install_nano; setup_swap ;;
+      8) setup_bbr ;;
+      9) install_unzip; install_docker; install_tailscale; install_nginx; install_pi; install_nano; setup_swap; setup_bbr ;;
       0) log_info "再见"; exit 0 ;;
       *) log_warn "无效选项: $n" ;;
     esac
@@ -160,7 +200,8 @@ case "$1" in
   pi)       install_pi ;;
   nano)     install_nano ;;
   swap)     setup_swap ;;
-  all)      install_unzip; install_docker; install_tailscale; install_nginx; install_pi; install_nano; setup_swap ;;
+  bbr)      setup_bbr ;;
+  all)      install_unzip; install_docker; install_tailscale; install_nginx; install_pi; install_nano; setup_swap; setup_bbr ;;
   "")       interactive ;;
-  *)        log_warn "未知参数: $1（可用: unzip / docker / tailscale / nginx / pi / nano / swap / all）"; exit 1 ;;
+  *)        log_warn "未知参数: $1（可用: unzip / docker / tailscale / nginx / pi / nano / swap / bbr / all）"; exit 1 ;;
 esac
