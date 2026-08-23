@@ -30,7 +30,8 @@ bash <(curl -Ls https://raw.githubusercontent.com/alick-zhang/one-key-install/ma
 | ports | 防火墙放行 80/443（自动识别 ufw / firewalld / iptables；无防火墙则确认已通。云厂商安全组需控制台手动放行） |
 | fail2ban | SSH 防爆破：10 分钟内密码错 5 次封禁 1 小时（jail.d 持久化，`fail2ban-client status sshd` 查看） |
 | rclone | rclone 云存储同步/备份（官方 install.sh 装最新版，支持 S3/R2/OneDrive/WebDAV/SFTP 等 70+ 后端，`rclone config` 配置） |
-| openlist | OpenList 网盘聚合/文件列表（Docker Compose 部署到 `/opt/openlist`，端口 5244，自动补装 Docker；初始密码看 `docker logs openlist`，重置: `docker exec openlist ./openlist admin random`） |
+| openlist | OpenList 网盘聚合/文件列表（Docker Compose 部署到 `/opt/openlist`，装完自动询问是否套反向代理；套上后 5244 仅绑 127.0.0.1。初始密码看 `docker logs openlist`，重置: `docker exec openlist ./openlist admin random`） |
+| proxy | 通用 Nginx 反向代理：交互输入域名 → 自动生成 conf（含大文件上传支持）→ 可选 certbot 签 HTTPS（Let's Encrypt 自动续期）。公网只暴露 80/443，后端端口收口到 127.0.0.1 |
 | clean | 系统清理：autoremove 清无用包 + 包缓存 + journal 日志压到 7 天/200M（可反复跑） |
 
 ## 特性
@@ -39,6 +40,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/alick-zhang/one-key-install/ma
 - **幂等**：已安装的项自动跳过，重复跑 / 中断后续跑都安全
 - **多发行版**：兼容 apt（Debian/Ubuntu）、dnf/yum（CentOS/RHEL）
 - **参数式调用**：支持 `install.sh <item>` 或组合多个，不传参数进交互菜单
+- **端口收口**：套反向代理的应用只绑 127.0.0.1，公网只露 80/443（Docker 端口映射会绕过 ufw，靠回环绑定收口比防火墙可靠）
 
 ## 添加新安装项
 
