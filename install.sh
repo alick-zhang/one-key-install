@@ -100,58 +100,13 @@ install_rclone() {
   command -v rclone >/dev/null 2>&1 && log_info "rclone 安装完成，运行 'rclone config' 配置云盘后即可使用" || { log_error "rclone 安装失败"; exit 1; }
 }
 
-install_openlist() {
-  # 依赖 Docker，先幂等补齐
-  command -v docker >/dev/null 2>&1 || install_docker
-  # 幂等：容器已存在则跳过
-  if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qx openlist; then
-    log_info "OpenList 容器已存在，跳过（更新: cd /opt/openlist && docker compose pull && docker compose up -d）"
-    return
-  fi
-  log_info "安装 OpenList（网盘聚合/文件列表，Docker Compose 部署）..."
-  mkdir -p /opt/openlist/data
-  cat > /opt/openlist/docker-compose.yml <<'EOF'
-services:
-  openlist:
-    image: openlistteam/openlist:latest
-    container_name: openlist
-    restart: always
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-    ports:
-      - "5244:5244"
-    environment:
-      - PUID=0
-      - PGID=0
-      - UMASK=022
-    volumes:
-      - /opt/openlist/data:/opt/openlist/data
-EOF
-  cd /opt/openlist && docker compose up -d
-  docker ps --format '{{.Names}}' | grep -qx openlist || { log_error "OpenList 容器未正常运行，查日志: docker logs openlist"; exit 1; }
-  log_info "OpenList 部署完成（初始密码看 'docker logs openlist'，重置: docker exec openlist ./openlist admin random）"
-
-  # 端口收口：配反代后 5244 仅绑 127.0.0.1，公网只走 80/443
-  # 注：Docker 端口映射走 iptables DOCKER 链，优先于 ufw/firewalld，防火墙拦不住；收口必须靠回环绑定
-  read -rp "是否现在为 OpenList 配置反向代理（域名访问，5244 不对公网暴露）? (Y/n): " yn
-  if [[ ! "$yn" =~ ^[Nn]$ ]]; then
-    sed -i 's/"5244:5244"/"127.0.0.1:5244:5244"/' /opt/openlist/docker-compose.yml
-    docker compose up -d
-    setup_proxy openlist 5244
-  else
-    log_warn "未配反代：5244 对公网开放。之后想收口：改 compose 端口为 127.0.0.1:5244:5244 后重跑 'install.sh proxy'"
-  fi
-}
-
 setup_proxy() {
   # 通用 Nginx 反向代理流程：$1=应用名（nginx 配置文件名） $2=后端端口；缺省进交互输入
   # 套上反代后公网只暴露 80/443，后端端口只需监听 127.0.0.1
   local app="${1:-}" port="${2:-}"
   command -v nginx >/dev/null 2>&1 || install_nginx
   if [[ -z "$app" || -z "$port" ]]; then
-    read -rp "应用名（nginx 配置文件名，如 openlist）: " app
+    read -rp "应用名（nginx 配置文件名，如 myapp）: " app
     read -rp "应用监听的后端端口（如 5244）: " port
     [[ -z "$app" || -z "$port" ]] && { log_warn "输入不完整，已取消"; return 0; }
   fi
@@ -371,10 +326,9 @@ menu() {
   echo "10) 防火墙放行 80/443"
   echo "11) fail2ban（SSH 防爆破）"
   echo "12) rclone（云存储同步/备份，支持 S3/R2/OneDrive/WebDAV 等）"
-  echo "13) OpenList（网盘聚合，Docker Compose 部署，装完可一键套反代）"
-  echo "14) 反向代理（任意服务配域名 + HTTPS，端口收口只露 80/443）"
-  echo "15) 系统清理（包缓存 + 日志压缩）"
-  echo "16) 全部安装"
+  echo "13) 反向代理（任意服务配域名 + HTTPS，端口收口只露 80/443）"
+  echo "14) 系统清理（包缓存 + 日志压缩）"
+  echo "15) 全部安装"
   echo " 0) 退出"
   echo "=============================================="
 }
@@ -382,7 +336,7 @@ menu() {
 interactive() {
   while true; do
     menu
-    read -rp "请选择 [0-16]: " n
+    read -rp "请选择 [0-15]: " n
     case $n in
       1) install_unzip ;;
       2) install_docker ;;
@@ -396,10 +350,9 @@ interactive() {
       10) setup_ports ;;
       11) install_fail2ban ;;
       12) install_rclone ;;
-      13) install_openlist ;;
-      14) setup_proxy ;;
-      15) setup_clean ;;
-      16) install_unzip; install_docker; install_tailscale; install_nginx; install_pi; install_nano; setup_swap; setup_bbr; install_cron; setup_ports; install_fail2ban; install_rclone; install_openlist ;;   # 不含 proxy：反代需交互输域名，装完应用时会单独询问
+      13) setup_proxy ;;
+      14) setup_clean ;;
+      15) install_unzip; install_docker; install_tailscale; install_nginx; install_pi; install_nano; setup_swap; setup_bbr; install_cron; setup_ports; install_fail2ban; install_rclone ;;   # 不含 proxy：反代需交互输域名，装完应用时会单独询问
       0) log_info "再见"; exit 0 ;;
       *) log_warn "无效选项: $n" ;;
     esac
@@ -420,10 +373,9 @@ case "$1" in
   ports)    setup_ports ;;
   fail2ban) install_fail2ban ;;
   rclone)   install_rclone ;;
-  openlist) install_openlist ;;
   proxy)    setup_proxy ;;
   clean)    setup_clean ;;
-  all)      install_unzip; install_docker; install_tailscale; install_nginx; install_pi; install_nano; setup_swap; setup_bbr; install_cron; setup_ports; install_fail2ban; install_rclone; install_openlist ;;
+  all)      install_unzip; install_docker; install_tailscale; install_nginx; install_pi; install_nano; setup_swap; setup_bbr; install_cron; setup_ports; install_fail2ban; install_rclone ;;
   "")       interactive ;;
-  *)        log_warn "未知参数: $1（可用: unzip / docker / tailscale / nginx / pi / nano / swap / bbr / cron / ports / fail2ban / rclone / openlist / proxy / clean / all）"; exit 1 ;;
+  *)        log_warn "未知参数: $1（可用: unzip / docker / tailscale / nginx / pi / nano / swap / bbr / cron / ports / fail2ban / rclone / proxy / clean / all）"; exit 1 ;;
 esac
