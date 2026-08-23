@@ -30,6 +30,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/alick-zhang/one-key-install/ma
 | ports | 防火墙放行 80/443（自动识别 ufw / firewalld / iptables；无防火墙则确认已通。云厂商安全组需控制台手动放行） |
 | fail2ban | SSH 防爆破：10 分钟内密码错 5 次封禁 1 小时（jail.d 持久化，`fail2ban-client status sshd` 查看） |
 | rclone | rclone 云存储同步/备份（官方 install.sh 装最新版，支持 S3/R2/OneDrive/WebDAV/SFTP 等 70+ 后端，`rclone config` 配置） |
+| openlist | OpenList 网盘聚合/文件列表（Docker Compose 部署到 `/opt/openlist`，端口 5244，自动补装 Docker；初始密码看 `docker logs openlist`，重置: `docker exec openlist ./openlist admin random`） |
 | clean | 系统清理：autoremove 清无用包 + 包缓存 + journal 日志压到 7 天/200M（可反复跑） |
 
 ## 特性
