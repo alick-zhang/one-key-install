@@ -14,6 +14,23 @@ bash <(curl -Ls https://raw.githubusercontent.com/alick-zhang/one-key-install/ma
 bash <(curl -Ls https://raw.githubusercontent.com/alick-zhang/one-key-install/main/install.sh) all
 ```
 
+### 小鸡代理节点（独立脚本 install-proxy.sh，仅 Alpine）
+
+给 128M/1G 级迷你 VPS（含 NAT 小鸡）跑代理节点用，与 install.sh 主体无关（Alpine 无 apt/dnf/yum）。
+sing-box 宿主机裸跑，双协议同进程，零必填项全自动生成密钥：
+
+```bash
+bash <(curl -Ls https://raw.githubusercontent.com/alick-zhang/one-key-install/main/install-proxy.sh)
+# NAT 小鸡指定商家映射的外部端口：... install-proxy.sh --port 8443 --ext-port 51234
+# 商家不给 UDP 映射就砍掉 Hy2：... install-proxy.sh --no-hy2
+# 卸载：... install-proxy.sh --uninstall
+```
+
+- 主链路：VLESS-Reality（TCP，伪装成访问大站 TLS，不需域名/证书，抗探测最强）
+- 备链路：Hysteria2（UDP/QUIC，拥堵时段切速），自签证书 + insecure=1
+- 输出 v2rayN/Clash Meta 可直接粘贴的导入链接；NAT 场景自动用「共享IP:外部端口」生成
+- 小内存兑底：无 swap 且磁盘充裕时自动加 128M swapfile；apk 源失败自动改 GitHub releases 装二进制
+
 ## 支持安装项
 
 | 选项 | 内容 |
