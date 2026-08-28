@@ -47,6 +47,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/alick-zhang/one-key-install/ma
 | ports | 防火墙放行 80/443（自动识别 ufw / firewalld / iptables；无防火墙则确认已通。云厂商安全组需控制台手动放行） |
 | fail2ban | SSH 防爆破：10 分钟内密码错 5 次封禁 1 小时（jail.d 持久化，`fail2ban-client status sshd` 查看） |
 | rclone | rclone 云存储同步/备份（官方 install.sh 装最新版，支持 S3/R2/OneDrive/WebDAV/SFTP 等 70+ 后端，`rclone config` 配置） |
+| gost | gost HTTP/SOCKS5 代理（GitHub 最新版二进制，systemd Restart=always 保活；随机账号/密码存 `/etc/gost/auth.env` 600 权限，HTTP/SOCKS5 同端口自动识别；默认 8443 被占自动换高位端口，自动放行防火墙） |
 | proxy | 通用 Nginx 反向代理：交互输入域名 → 自动生成 conf（含大文件上传支持）→ 可选 certbot 签 HTTPS（Let's Encrypt 自动续期）。公网只暴露 80/443，后端端口收口到 127.0.0.1 |
 | clean | 系统清理：autoremove 清无用包 + 包缓存 + journal 日志压到 7 天/200M（可反复跑） |
 

@@ -158,6 +158,101 @@ EOF
   log_info "HTTPS 完成: https://${domain}（certbot 自动续期，证书在 /etc/letsencrypt/）"
 }
 
+install_gost() {
+  # 幂等：服务在跑则跳过（凭证在 /etc/gost/auth.env）
+  if systemctl is-active --quiet gost 2>/dev/null; then
+    log_info "gost 服务已在运行，跳过（凭证: /etc/gost/auth.env，重启: systemctl restart gost）"
+    return
+  fi
+  log_info "安装 gost（HTTP/SOCKS5 代理，systemd 保活 + 随机账密）..."
+
+  # 版本：优先 GitHub API 取最新，失败回退固定版本
+  local GOST_VER
+  GOST_VER=$(curl -fsSL --max-time 10 https://api.github.com/repos/go-gost/gost/releases/latest 2>/dev/null | grep -oE '"tag_name": *"[^"]+"' | cut -d'"' -f4 | sed 's/^v//')
+  [[ -n "$GOST_VER" ]] || GOST_VER="3.2.4"
+  log_info "版本: v${GOST_VER}"
+
+  local ARCH
+  case "$(uname -m)" in
+    x86_64)  ARCH="amd64" ;;
+    aarch64) ARCH="arm64" ;;
+    *) log_error "不支持的架构: $(uname -m)"; exit 1 ;;
+  esac
+
+  local TMPD
+  TMPD=$(mktemp -d)
+  curl -fsSL "https://github.com/go-gost/gost/releases/download/v${GOST_VER}/gost_${GOST_VER}_linux_${ARCH}.tar.gz" -o "$TMPD/gost.tgz"
+  tar xzf "$TMPD/gost.tgz" -C "$TMPD"
+  install -m 755 "$(find "$TMPD" -type f -name gost | head -1)" /usr/local/bin/gost
+  rm -rf "$TMPD"
+  /usr/local/bin/gost -V >/dev/null 2>&1 || { log_error "gost 二进制不可执行"; exit 1; }
+
+  # 随机账密 + 端口（默认 8443，被占自动换高位端口）
+  local GOST_USER GOST_PASS GOST_PORT=8443
+  GOST_USER=$(tr -dc 'a-z0-9' </dev/urandom | head -c 8)
+  GOST_PASS=$(tr -dc 'a-zA-Z0-9' </dev/urandom | head -c 20)
+  while ss -tln 2>/dev/null | awk '{print $4}' | grep -qE ":${GOST_PORT}$"; do
+    GOST_PORT=$(( (RANDOM % 20000) + 30000 ))
+  done
+
+  mkdir -p /etc/gost
+  cat > /etc/gost/auth.env <<EOF
+GOST_USER=${GOST_USER}
+GOST_PASS=${GOST_PASS}
+GOST_PORT=${GOST_PORT}
+EOF
+  chmod 600 /etc/gost/auth.env
+
+  # systemd 服务（Restart=always 保活；账密走 EnvironmentFile，不进命令历史）
+  cat > /etc/systemd/system/gost.service <<EOF
+[Unit]
+Description=gost HTTP/SOCKS5 proxy
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=/etc/gost/auth.env
+ExecStart=/usr/local/bin/gost -L \${GOST_USER}:\${GOST_PASS}@:\${GOST_PORT}
+Restart=always
+RestartSec=5
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  systemctl daemon-reload
+  systemctl enable --now gost
+  sleep 1
+  systemctl is-active --quiet gost || { log_error "gost 启动失败，日志: journalctl -u gost -n 20"; exit 1; }
+
+  # 防火墙放行 TCP（自动识别 ufw/firewalld/iptables，无防火墙则本就全通）
+  if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | head -1 | grep -q '^Status: active'; then
+    ufw allow "${GOST_PORT}/tcp" >/dev/null; log_info "ufw 已放行 ${GOST_PORT}/tcp"
+  elif command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state 2>/dev/null | grep -q running; then
+    firewall-cmd --permanent --add-port="${GOST_PORT}/tcp" >/dev/null && firewall-cmd --reload >/dev/null
+    log_info "firewalld 已放行 ${GOST_PORT}/tcp（持久化）"
+  elif command -v iptables >/dev/null 2>&1 && iptables -L INPUT -n 2>/dev/null | grep -qE 'REJECT|DROP'; then
+    iptables -I INPUT -p tcp --dport "$GOST_PORT" -j ACCEPT
+    log_info "iptables 已放行 ${GOST_PORT}/tcp"
+  else
+    log_info "无防火墙拦截，端口默认全通"
+  fi
+
+  # 公网 IP 尽力探测（仅展示用）
+  local PUB_IP
+  PUB_IP=$(curl -fs4 --max-time 8 https://api.ip.sb/ip 2>/dev/null | tr -d '[:space:]')
+  [[ -n "$PUB_IP" ]] || PUB_IP="<服务器IP>"
+
+  log_info "gost 安装完成（systemd 保活，随机账密）"
+  echo
+  echo "  代理地址（HTTP 和 SOCKS5 同端口自动识别）:"
+  echo "    http://${GOST_USER}:${GOST_PASS}@${PUB_IP}:${GOST_PORT}"
+  echo "  快速验证:"
+  echo "    curl -x http://${GOST_USER}:${GOST_PASS}@${PUB_IP}:${GOST_PORT} https://api.ip.sb/ip"
+  echo "  凭证文件: /etc/gost/auth.env（600）｜ 重启: systemctl restart gost ｜ 日志: journalctl -u gost -f"
+  log_warn "云厂商安全组需在控制台手动放行 ${GOST_PORT}/tcp"
+}
+
 install_cron() {
   command -v crontab >/dev/null 2>&1 && { log_info "cron 已安装，跳过"; return; }
   log_info "安装 cron（定时任务）..."
@@ -327,8 +422,9 @@ menu() {
   echo "11) fail2ban（SSH 防爆破）"
   echo "12) rclone（云存储同步/备份，支持 S3/R2/OneDrive/WebDAV 等）"
   echo "13) 反向代理（任意服务配域名 + HTTPS，端口收口只露 80/443）"
-  echo "14) 系统清理（包缓存 + 日志压缩）"
-  echo "15) 全部安装"
+  echo "14) gost（HTTP/SOCKS5 代理，systemd 保活 + 随机账密）"
+  echo "15) 系统清理（包缓存 + 日志压缩）"
+  echo "16) 全部安装"
   echo " 0) 退出"
   echo "=============================================="
 }
@@ -336,7 +432,7 @@ menu() {
 interactive() {
   while true; do
     menu
-    read -rp "请选择 [0-15]: " n
+    read -rp "请选择 [0-16]: " n
     case $n in
       1) install_unzip ;;
       2) install_docker ;;
@@ -351,8 +447,9 @@ interactive() {
       11) install_fail2ban ;;
       12) install_rclone ;;
       13) setup_proxy ;;
-      14) setup_clean ;;
-      15) install_unzip; install_docker; install_tailscale; install_nginx; install_pi; install_nano; setup_swap; setup_bbr; install_cron; setup_ports; install_fail2ban; install_rclone ;;   # 不含 proxy：反代需交互输域名，装完应用时会单独询问
+      14) install_gost ;;
+      15) setup_clean ;;
+      16) install_unzip; install_docker; install_tailscale; install_nginx; install_pi; install_nano; setup_swap; setup_bbr; install_cron; setup_ports; install_fail2ban; install_rclone; install_gost ;;   # 不含 proxy：反代需交互输域名，装完应用时会单独询问
       0) log_info "再见"; exit 0 ;;
       *) log_warn "无效选项: $n" ;;
     esac
@@ -373,9 +470,10 @@ case "$1" in
   ports)    setup_ports ;;
   fail2ban) install_fail2ban ;;
   rclone)   install_rclone ;;
+  gost)     install_gost ;;
   proxy)    setup_proxy ;;
   clean)    setup_clean ;;
-  all)      install_unzip; install_docker; install_tailscale; install_nginx; install_pi; install_nano; setup_swap; setup_bbr; install_cron; setup_ports; install_fail2ban; install_rclone ;;
+  all)      install_unzip; install_docker; install_tailscale; install_nginx; install_pi; install_nano; setup_swap; setup_bbr; install_cron; setup_ports; install_fail2ban; install_rclone; install_gost ;;
   "")       interactive ;;
-  *)        log_warn "未知参数: $1（可用: unzip / docker / tailscale / nginx / pi / nano / swap / bbr / cron / ports / fail2ban / rclone / proxy / clean / all）"; exit 1 ;;
+  *)        log_warn "未知参数: $1（可用: unzip / docker / tailscale / nginx / pi / nano / swap / bbr / cron / ports / fail2ban / rclone / gost / proxy / clean / all）"; exit 1 ;;
 esac
