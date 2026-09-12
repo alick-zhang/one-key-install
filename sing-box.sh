@@ -42,7 +42,7 @@ p()     { echo -e "\e[1;35m$1\033[0m"; }
 log_info()  { echo -e "${green}[INFO]${re} $*"; }
 log_warn()  { echo -e "${yellow}[WARN]${re} $*"; }
 log_error() { echo -e "${red}[ERROR]${re} $*"; }
-ask()       { local __v; read -rp "$(b "$1")" __v && eval "$2=\"\$__v\""; }
+ask()       { local __v; read -rp "$(b "$2")" __v && eval "$1=\"\$__v\""; }
 pause()     { read -n 1 -s -r -p "$(r "按任意键返回...")"; echo; }
 
 # ================= 常量 =================
