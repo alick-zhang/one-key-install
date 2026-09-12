@@ -14,6 +14,27 @@ bash <(curl -Ls https://raw.githubusercontent.com/alick-zhang/one-key-install/ma
 bash <(curl -Ls https://raw.githubusercontent.com/alick-zhang/one-key-install/main/install.sh) all
 ```
 
+### sing-box 四合一节点管理（独立脚本 sing-box.sh）
+
+自研的 sing-box 节点一键安装 + 常驻管理脚本，功能形态复刻 `eooce/sing-box`，
+但**二进制全部走官方渠道**（SagerNet / Cloudflare 官方 GitHub Releases），订阅文件本地生成，
+不依赖任何第三方 CDN 或订阅转换站——上游删库不影响本脚本：
+
+```bash
+bash <(curl -Ls https://raw.githubusercontent.com/alick-zhang/one-key-install/main/sing-box.sh)
+# 静默安装（可带环境变量）：... sing-box.sh -i
+# 静默卸载：... sing-box.sh -u
+```
+
+- 四协议一次部署，共用一个 UUID：VLESS-Reality（TCP 主链路）/ VMess-WS（Argo 隧道入口）/ TUIC v5 / Hysteria2
+- 多发行版：apt / dnf / yum / apk，systemd / OpenRC 双支持（含 Alpine 小鸡）
+- 装完输 `sb` 随时唤出菜单：启停 / 日志 / 更新二进制、Argo 临时↔固定隧道切换、改 UUID/端口/密钥、
+  IPv4/IPv6 切换、WARP 分流（AI 站点预设走 WARP）、http 订阅入口（nginx，base64 订阅）
+- 端口自动编排：Reality 用主端口 P，nginx 订阅 P+1，TUIC P+2（UDP），Hy2 P+3（UDP）；vmess-ws 只听 127.0.0.1 供隧道回源
+- 可选裁剪（环境变量）：`NO_ARGO=1`（不装隧道）/ `NO_HY2=1` `NO_TUIC=1`（商家没给 UDP）/
+  `NO_NGINX=1`（不要订阅入口）/ `ARGO_TOKEN=xxx`（固定隧道，域名长期稳定）/ `PORT=` / `REALITY_SNI=` / `NODENAME=`
+- Alpine 需先 `apk add bash curl`
+
 ### 小鸡代理节点（独立脚本 install-proxy.sh，仅 Alpine）
 
 给 128M/1G 级迷你 VPS（含 NAT 小鸡）跑代理节点用，与 install.sh 主体无关（Alpine 无 apt/dnf/yum）。
