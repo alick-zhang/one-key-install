@@ -2,6 +2,14 @@
 
 Linux 一键安装脚本模板。仿 `bash <(curl -Ls URL)` 的远程一键执行方式，脚本不落地、直接下载即运行。
 
+## 脚本总览
+
+| 脚本 | 适用场景 | 一句话说明 |
+|------|----------|-----------|
+| [install.sh](#用法) | 通用 VPS（Debian/Ubuntu/CentOS 系） | 常用工具菜单式安装：Docker、Tailscale、BBR、fail2ban、反代等 15 项 |
+| [sing-box.sh](#sing-box-四合一节点管理独立脚本-sing-boxsh) | 想跑代理节点的 VPS | 自研 sing-box 四合一（Reality/Argo/TUIC/Hy2）一键部署 + `sb` 管理菜单 |
+| [install-proxy.sh](#小鸡代理节点独立脚本-install-proxysh仅-alpine) | Alpine 迷你 NAT 小鸡（128M 级） | 双链路轻量节点（Reality + Hy2），零必填项全自动 |
+
 ## 用法
 
 ```bash
@@ -34,6 +42,24 @@ bash <(curl -Ls https://raw.githubusercontent.com/alick-zhang/one-key-install/ma
 - 可选裁剪（环境变量）：`NO_ARGO=1`（不装隧道）/ `NO_HY2=1` `NO_TUIC=1`（商家没给 UDP）/
   `NO_NGINX=1`（不要订阅入口）/ `ARGO_TOKEN=xxx`（固定隧道，域名长期稳定）/ `PORT=` / `REALITY_SNI=` / `NODENAME=`
 - Alpine 需先 `apk add bash curl`
+
+#### 从老王版（eooce/sing-box）迁移
+
+老王版与本脚本**共用同一个目录 `/etc/sing-box`**，但配置布局不同（他是 `conf/` 拆分文件，
+本脚本是单文件 `config.json`），直接覆盖安装会端口打架、两边都跑不正常。迁移正确姿势：
+
+1. **不要用老王脚本菜单里的卸载**——他会把 nginx 本体整个卸掉，机器上其他走反代的应用会断
+2. 手动只清 sing-box 部分（nginx 一根手指都不碰）：
+   ```bash
+   systemctl stop sing-box argo 2>/dev/null
+   systemctl disable sing-box argo 2>/dev/null
+   rm -f /etc/systemd/system/sing-box.service /etc/systemd/system/argo.service
+   systemctl daemon-reload
+   rm -rf /etc/sing-box
+   rm -f /usr/bin/sb
+   ```
+3. 再跑本脚本安装。nginx 已存在会被检测到并跳过安装，已有反代配置和 HTTPS 证书原样保留；
+   本脚本对 nginx 只新增一个自己的订阅配置 `sing-box-sub.conf`，不碰其他配置
 
 ### 小鸡代理节点（独立脚本 install-proxy.sh，仅 Alpine）
 
